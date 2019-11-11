@@ -38,8 +38,19 @@ $table->setData(function()  {
 
 ```
 
+# Opciones de la tabla
+```php
+ $table->setOption('Nombre de la Opcion&', function($n)  {
+    //codigo a ejecutar
+    });
+
+ ```
+
+
 # Opcion par Exportar Tabla a pdf y Excell
 ```php
 $table->export('PDF','Excel');
 
 ```
+
+
