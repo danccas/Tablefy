@@ -46,3 +46,9 @@ $table->setData(function()  {
 
  ```
 
+
+# Opcion par Exportar Tabla a pdf y Excell
+```php
+$table->export('PDF','Excel');
+
+```
