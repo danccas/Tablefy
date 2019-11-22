@@ -58,12 +58,46 @@ $table->export('PDF','Excel');
 ```
 
 
-#Funciones Disponibles con Formity
-
- 
+# Funcion Filtrado Disponibles con Formity y Doris-PDO
+Filtro a el contenido de una Tabla
  ```php
- $table = Tablefy::getInstance('listado');
+ $table = Tablefy::getInstance('tabla_filtrado');
+ //aqui se indica a el formulario que contiene los campos de filtrado
+ $table->setFilter('formulario-fiiltrado');
 
+ //declara el set header
+ ...
+ //declarar el set data con pagination
+ $table->setData(function($Pagination) use($db) {
+    return Libs::funcion_de_llenado($db, $pagination);
+  });
 
  ```
 
+En la declaracion del formulario
+ ```php
+
+
+ 
+ ```
+
+
+Dentro de la funcion  de llenado
+```php
+
+ static function obtener_listado_de_contactos($db, $pagination = null) {
+  $where = array();
+  if(($pagination instanceof Pagination) && $pagination->has_filter) {
+    $filtro = $pagination->filter;
+    if(@!is_null($filtro['campo_filtro'])) {
+        $where[] = "P.campo_db =".(string) $filtro['campo_filtro'];
+      }     
+  }
+
+  $where = array_filter($where, function($n) { return !empty($n); });
+  $where = !empty($where) ? ' AND ' . implode(' AND ', $where) : '';
+
+  $consulta =" SELECT * FROM  TU_TABLA WHERE eliminado not null ".$where
+
+ }
+```
