@@ -38,6 +38,10 @@ $table->setData(function()  {
 
 ```
 
+
+
+
+
 # Opciones de la tabla
 ```php
  $table->setOption('Nombre de la Opcion&', function($n)  {
@@ -52,3 +56,14 @@ $table->setData(function()  {
 $table->export('PDF','Excel');
 
 ```
+
+
+#Funciones Disponibles con Formity
+
+ 
+ ```php
+ $table = Tablefy::getInstance('listado');
+
+
+ ```
+
