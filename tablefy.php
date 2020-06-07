@@ -75,7 +75,7 @@ class Tablefy {
     }
   }
   public function getLink() {
-    return Route::link(null, null, null, 'tfweb' . $this->index . '=' . $this->uniqueId);
+    return Route::uri(null, null, null, 'tfweb' . $this->index . '=' . $this->uniqueId);
   }
   public function setTitle($t) {
     $this->title = $t;
@@ -100,7 +100,7 @@ class Tablefy {
         return $row[$n['id']];
       }, $ruta, -1, $cantidad);
     }
-    $rp = Route::link($ruta, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, $get);
+    $rp = Route::uri($ruta, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, $get);
     return $rp;
   }
   public function setFilter($f) {
@@ -114,7 +114,7 @@ class Tablefy {
     return false;
   }
   public function request($x) {
-    return isset($_GET[$x]) ? $_GET[$x] : null;
+    return isset($_GET[$x]) || $_GET[$x] === null ? $_GET[$x] : false;
   }
   public function setHeader() {
     $n = func_get_args();
@@ -161,11 +161,13 @@ class Tablefy {
       return null;
     }
     array_walk($dat, function(&$n, $k) use($map, &$i) {
-      $m['tb_orden']   = $k;
       $m['tb_id']      = isset($n['tb_id']) ? $n['tb_id'] : (isset($n['id']) ? $n['id'] : uniqid());
-      $m['tb_options'] = isset($m['tb_options']) ? array_map(function($n) { return static::hash($n); }, $m['tb_options']) : null;
       $m['tb_data']    = $n;
       $m['tb_map']     = !is_null($map) && is_callable($map) ? $map($n) : false;
+      $m['tb_orden']   = $k;
+      $n['tb_options'] = isset($m['tb_map']['tb_options']) ? $m['tb_map']['tb_options'] : (isset($n['tb_options']) ? $n['tb_options'] : null);
+      $m['tb_options'] = $n['tb_options'] !== null ? array_map(function($n) { return static::hash($n); }, is_array($n['tb_options']) ? $n['tb_options'] : explode(',', $n['tb_options'])) : null;
+      #$m['tb_options'] = isset($n['tb_options']) ? array_map(function($n) { return static::hash($n); }, $n['tb_options']) : null;
       $n = $m;
       unset($m);
     });
@@ -206,7 +208,7 @@ class Tablefy {
   }
   public function prepare() {
     if(!is_null($this->request($this->passVarAjax))) {
-      echo json_encode($this->renderJson());
+      echo $this->render();
       exit;
     }
     $var_option = 'tfweb' . $this->index;
@@ -219,7 +221,7 @@ class Tablefy {
       if($en == 'pdf') {
         /* Exportar data en PDF */
         ob_start();
-          $this->renderOnlyTable(null, true);
+          echo $this->renderOnlyTable(null, true);
         $html = ob_get_clean();
         require_once(ABS_LIBRERIAS . 'pdfily.php');
         $pdf = new PDFily(Identify::g()->empresa);
@@ -269,6 +271,7 @@ class Tablefy {
       'event' => $call,
       'popy'  => $is_popy,
       'link'  => $this->passVarNam . '=' . $key . '&' . $this->passVarVal . '=:xid');
+
     if(!empty($_GET[$this->passVarNam]) && $key == $_GET[$this->passVarNam]) { /* Es solicitud a nuestra opcion, y nuestro Tablefy */
       if(!is_null($this->row_cb)) {
         $rp = ($this->row_cb)($_GET[$this->passVarVal]);
@@ -283,7 +286,7 @@ class Tablefy {
               Popy::g()->currentRoute = $route;
             }
             Route::addQuery($this->passVarNam . '=' . $key . '&' . $this->passVarVal . '=' . $_GET[$this->passVarVal]);
-            Theme::data('submenu', array());
+            Route::data('submenu', array());
             $e['call'] = $this->options[$_GET[$this->passVarNam]]['event']['data']($rp, $route);
             exit; //TODO
           }
@@ -301,7 +304,7 @@ class Tablefy {
             Popy::g()->currentRoute = $route;
           }
           Route::addQuery($this->passVarNam . '=' . $key . '&' . $this->passVarVal . '=' . $_GET[$this->passVarVal]);
-          Theme::data('submenu', array());
+          Route::data('submenu', array());
           $e['call'] = $this->options[$_GET[$this->passVarNam]]['event']['data']($dat[$_GET[$this->passVarVal]], $route);
           exit; //TODO
         }
@@ -366,6 +369,7 @@ class Tablefy {
     }
   }
   private static function replace_text_by_icon($t) {
+    return strtoupper($t);
     $tx = strtolower($t);
     $icons = array(
       'editar'   => '<i class="fa fa-edit" style="color:#5b87e5;margin-right:3px;"></i>',
@@ -381,28 +385,45 @@ class Tablefy {
     $r .= ' <span style="font-size:10px;">' . strtoupper($t) . '</span>';
     return $r;
   }
-  public function renderOnlyTable($style = null, $basicHTML = false) {
+  public function renderOnlyTable($attr = null, $basicHTML = false) {
     $data = $this->__processDataInternal();
     $data = $this->__processDataExternal($data);
-    if($this->pagination->has_filter && !$basicHTML) {
-      echo $this->pagination->renderFilter();
+    $attrs = array(
+      'class' => 'table is-fullwidth is-striped',
+    );
+    if(!empty($attr) && is_array($attr)) {
+      $attrs = array_merge($attrs, $attr);
     }
-    if(!empty($this->export_in) && !$basicHTML) {
-      echo "<div class=\"buttons has-addons is-right\" style=\"margin: 0;padding-top: 5px;padding-right: 5px;\">";
-      echo "<span class=\"button is-small\">Exportar:</span>";
-      foreach($this->export_in as $e) {
-        $link = Route::link(null, null, null, 'export_' . $this->uniqueId . '=' . $e);
-        echo "<a class=\"button is-small is-danger\" href=\"" . $link . "\">" . strtoupper($e) . "</a>";
+    $_attrs = array();
+    foreach($attrs as $k => $v) {
+      $_attrs[] = $k . '="' . $v . '"';
+    }
+    $attrs = implode(' ', $_attrs);
+    unset($_attrs);
+
+    $rp = '';
+    if(!$this->ajax || ($this->ajax && $this->request($this->passVarAjax) === NULL)) {
+      if($this->pagination->has_filter && !$basicHTML) {
+        $rp .= $this->pagination->renderFilter();
       }
-      echo "</div>";
+      if(!empty($this->export_in) && !$basicHTML) {
+        $rp .= "<div class=\"buttons has-addons is-right\" style=\"margin: 0;padding-top: 5px;padding-right: 5px;\">";
+        $rp .= "<span class=\"button is-small\">Exportar:</span>";
+        foreach($this->export_in as $e) {
+          $link = Route::uri(null, null, null, 'export_' . $this->uniqueId . '=' . $e);
+          $rp .= "<a class=\"button is-small is-danger\" href=\"" . $link . "\">" . strtoupper($e) . "</a>";
+        }
+        $rp .= "</div>";
+      }
     }
+    $rp .= "<div data-content-tablefy>";
     if($basicHTML) {
-      echo "<table border=\"1\" cellpadding=\"5\" data-id=\"" . $this->index . "\" data-hash=\"" . $this->hash . "\">\n";
+      $rp .= "<table border=\"1\" cellpadding=\"5\" data-id=\"" . $this->index . "\" data-hash=\"" . $this->hash . "\">\n";
     } else {
-      echo "<table data-id=\"" . $this->index . "\" class=\"table is-fullwidth is-striped style00" . $style . "\" data-hash=\"" . $this->hash . "\">\n";
+      $rp .= "<table data-id=\"" . $this->index . "\" " . $attrs . " data-hash=\"" . $this->hash . "\">\n";
     }
-      echo "<thead>\n";
-        echo "<tr>\n";
+      $rp .= "<thead>\n";
+        $rp .= "<tr>\n";
           foreach ($this->headers as $h) {
             $th_attrs = ' ';
             if(!empty($h['style']) && is_array($h['style'])) {
@@ -410,16 +431,16 @@ class Tablefy {
                 $th_attrs .= $trck .'="' . $trcv . '" ';
               }
             }
-            echo "<th " . $th_attrs . ">" . (is_array($h) ? $h['text'] : $h) . "</th>\n";
+            $rp .= "<th " . $th_attrs . ">" . (is_array($h) ? $h['text'] : $h) . "</th>\n";
           }
           if($this->options !== false && !$basicHTML) {
-            echo "<th></th>\n";
+            $rp .= "<th></th>\n";
           }
-        echo "</tr>\n";
-      echo "</thead>\n";
-      echo "<tbody>\n";
+        $rp .= "</tr>\n";
+      $rp .= "</thead>\n";
+      $rp .= "<tbody>\n";
         if(empty($data)) {
-          echo "<tr><td class=\"has-text-centered\" colspan=\"" . count($this->headers) . "\">No se ha encontrado coincidencias.</td></tr>\n";
+          $rp .= "<tr><td class=\"has-text-centered\" colspan=\"" . count($this->headers) . "\">No se ha encontrado coincidencias.</td></tr>\n";
         } else {
         foreach($data as $tr) {
           $tr_attrs = ' ';
@@ -428,7 +449,7 @@ class Tablefy {
               $tr_attrs .= $trck .'="' . $trcv . '" ';
             }
           }
-          echo "<tr data-id=\"" . $tr['tb_id'] . "\"" . $tr_attrs . ">\n";
+          $rp .= "<tr data-id=\"" . $tr['tb_id'] . "\"" . $tr_attrs . ">\n";
           foreach ($tr['tb_map'] as $ktd => $td) {
             $params = array();
             if(!empty($td['style'])) {
@@ -440,65 +461,67 @@ class Tablefy {
                 }
               }
             }
-            echo "<td data-label=\"" . $td['label'] . "\" data-tr=\"" . $tr['tb_id'] . "\" data-id=\"" . $tr['tb_id'] . "\" " . implode(' ', $params) . ">" . $td['text'] . "</td>\n";
+            $rp .= "<td data-label=\"" . (is_array($td['label']) ? $td['label']['text'] : $td['label']) . "\" data-tr=\"" . $tr['tb_id'] . "\" data-id=\"" . $tr['tb_id'] . "\" " . implode(' ', $params) . ">" . $td['text'] . "</td>\n";
           }
           if($this->options !== false && !$basicHTML) {
-            echo "<td data-label=\"Opciones\">\n";
-              echo "<div class=\"opciones columns\" style=\"justify-content: flex-end;\">\n";
+            $rp .= "<td data-label=\"Opciones\">\n";
+              $rp .= "<div class=\"opciones columns\" style=\"justify-content: flex-end;padding-top: 10px;\">\n";
               foreach($tr['tb_options'] as $o) {
-                echo "<a class=\"button is-small\" " . (!empty($o['popy']) ? 'data-popy' : '') . " href=\"" . $o['href'] . "\" title=\"" . $o['name'] . "\">" . $o['rotulo'] . "</a>\n";
+                $rp .= "<a class=\"button is-small\" " . (!empty($o['popy']) ? 'data-popy' : '') . " href=\"" . $o['href'] . "\" title=\"" . $o['name'] . "\" style=\"margin-left:5px;\">" . $o['rotulo'] . "</a>\n";
               }
-              echo "</div>\n";
-            echo "</td>\n";
+              $rp .= "</div>\n";
+            $rp .= "</td>\n";
           }
-          echo "</tr>\n";
+          $rp .= "</tr>\n";
         }
         }
-      echo "</tbody>\n";
-    echo "</table>\n";
+      $rp .= "</tbody>\n";
+      $rp .= "</table>\n";
     if(!is_null($this->pagination) && !$basicHTML) {
-      echo $this->pagination->render();
+      if($this->ajax) {
+        $this->pagination->ajax = $this->ajax;
+        $this->pagination->link = Route::uri(null, DOMINIO_ACTUAL, SUBDOMINIO_ACTUAL, $this->pagination->vkey . '=$p1&' . $this->passVarAjax);
+      }
+      $rp .= $this->pagination->render();
     }
+    $rp .= "</div>";
+    return $rp;
   }
-  public function renderInPage($style = null) {
-    require_once(ABS_PLANTILLAS . 'cabecera_cpanel.php');
-    echo '<div class="card">';
-    echo '<div class="card-table">';
+  public function renderInPage($attr = null) {
+    $rp = Route::renderAssets();
+    $rp .= "<div class=\"card\">";
     if(!is_null($this->title)) {
-      echo '<h1 class="titular">' . $this->title . '</h1>';
+      $rp .= "<div class=\"card-header\">";
+      $rp .= "<p class=\"card-header-title\">";
+      $rp .= $this->title;
+      $rp .= "</p>";
+      $rp .= "</div>";
     }
-    //echo mostrar_submenu($SUBMENU);
-    echo Route::renderErrors();
-    echo '<div>';
-    $this->renderOnlyTable($style);
-    echo '</div>';
-    echo '</div>';
-    echo '</div>';
-    require_once(ABS_PLANTILLAS . 'pie_cpanel.php');
+    $rp .= "<div class=\"card-content\"><div class=\"table-responsive\">";
+    $rp .= Route::renderErrors();
+    $rp .= '<div data-containter-tablefy="' . $this->index . '">';
+    $rp .= $this->renderOnlyTable($attr);
+    $rp .= '</div></div></div></div>';
+    $VISTA_HTML = $rp;
+    unset($rp);
+    require_once(VIEWS . 'internal.php');
     exit;
   }
-  public function renderTablefy($style = null) {
-    if(ES_POPY) {
-      if(!empty(Theme::data('submenu'))) {
-        echo '<div class="struct_site_body_menu">';
-        echo '<ul class="inlineBlock nowrap no-full right">';
-        mostrar_menu(Theme::data('submenu'), null, true);
-        echo '</ul>';
-        echo '</div>';
-      }
+  public function render($attr = null) {
+    if($this->ajax && $this->request($this->passVarAjax) !== false) {
+      return $this->renderOnlyTable($attr);
     }
-    //echo '<div class="cuerpo_principal">';
+    $rp = '';
+    if(Route::requestByPopy()) {
+      $rp .= Route::renderNav();
+    }
     if(!is_null($this->title)) {
-      echo '<h1 class="titular">' . $this->title . '</h1>';
+      $rp .= '<h2>' . $this->title . '</h2>';
     }
-    //echo mostrar_submenu($SUBMENU);
-    echo Route::renderErrors();
-    echo '<div>';// style="white-space: nowrap;overflow: overlay;padding-bottom: 18px;">';
-    $this->renderOnlyTable($style);
-    echo '</div>';
-    //echo '</div>';
-  }
-  public function render($style = null) {
-    return $this->renderTablefy($style);
+    $rp .= Route::renderErrors();
+    $rp .= '<div data-containter-tablefy="' . $this->index . '">';
+      $rp .= $this->renderOnlyTable($attr);
+    $rp .= '</div>';
+    return $rp;
   }
 }
